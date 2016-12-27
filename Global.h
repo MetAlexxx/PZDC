@@ -14,7 +14,7 @@ extern int PK;
 
 
 enum Operations {
-	NL,
+	NL, CONST, LOAD,
 	PLS, MNS, MUL, DIV,
 	LSS, GTR, EQU, NEQ,
 	AND, OR,
@@ -36,6 +36,7 @@ enum Operations {
 struct StackEl {
 	Operations op;
 	wstring val;
+	StackEl(Operations o, wstring w) :op(o), val(w){}
 };
 
 extern map <wstring, int> labels;

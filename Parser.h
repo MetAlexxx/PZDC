@@ -4,6 +4,9 @@
 #define COCO_PARSER_H__
 
 #include "Global.h"
+
+
+
 #include "Scanner.h"
 
 
@@ -57,9 +60,9 @@ public:
 
 	void GRAPHPZDC();
 	void StatL();
-	void Op();
-	void RelOp();
-	void LogicOp();
+	void Op(Operations &op);
+	void RelOp(Operations &op);
+	void LogicOp(Operations &op);
 	void Operator();
 	void D_var(wchar_t* &name);
 	void S_var(wchar_t* &name);

@@ -25,18 +25,19 @@ IGNORE cr + lf + tab
 PRODUCTIONS
 
   GRAPHPZDC = {StatL}.
-  Op = '+'(.stackOp.push_back({PLS, L""}); PK++;.) |
-        '-'(.stackOp.push_back({MNS, L""}); PK++;.)|
-        '*'(.stackOp.push_back({MUL, L""}); PK++;.)|
-        '/'(.stackOp.push_back({DIV, L""}); PK++;.).
+  Op<Operations &op> = 
+        '+'(.op= PLS;.) |
+        '-'(.op=MNS;.)|
+        '*'(.op=MUL;.)|
+        '/'(.op=DIV;.).
+  RelOp<Operations &op> =  
+            "=="(.op=EQU;.)|
+            '<'(.op=LSS;.)|
+            '>'(.op=GTR;.)|
+            "!="(.op=NEQ;.).
 
-  RelOp =  "=="(.stackOp.push_back({EQU, L""}); PK++;.)|
-            '<'(.stackOp.push_back({LSS, L""}); PK++;.)|
-            '>'(.stackOp.push_back({GTR, L""}); PK++;.)|
-            "><"(.stackOp.push_back({NEQ, L""}); PK++;.).
-
-  LogicOp = "||"(.stackOp.push_back({OR, L""}); PK++;.)|
-            "&"(.stackOp.push_back({AND, L""}); PK++;.).
+  LogicOp<Operations &op> = "||"(.op=OR;.)|
+            "&"(.op=AND;.).
             
   StatL = [Number (.labels[t->val]=PK;.) ':'] Operator.
 
@@ -67,8 +68,8 @@ PRODUCTIONS
                             .).
 
   P_varId<bool set> (. wchar_t *pname; .) = "pid(" P_var<pname> ')' (.
-    (set)? stackOp.push_back({SET_PID, L""}),PK++ : stackOp.push_back({GET_PID, L""}),PK++;
-    stackOp.push_back({NL, wstring(pname)});
+    (set)? stackOp.push_back({SET_PID,  wstring(pname)}),PK++ :
+      stackOp.push_back({GET_PID,  wstring(pname)}),PK++;
   .).
   E_varP<bool set> (. wchar_t *ename; .) = "ep" ('F'|'S') '(' E_var<ename> ')'(.
     (set)? stackOp.push_back({SET_EP, L""}),PK++ : stackOp.push_back({GET_EP, L""}),PK++;
@@ -97,14 +98,14 @@ PRODUCTIONS
     )
     {'+' Edge }.
 
-  Any_Num (. wchar_t *name; .) = 
+  Any_Num (. wchar_t *name; Operations op; .) = 
     ( 
-      Number|
+      (Number (. stackOp.push_back({CONST, wstring(t->val)}); PK++; .))|
       P_varId<false>|
       E_varW<false>|
-      D_var<name>
+      (D_var<name> (. stackOp.push_back({LOAD, wstring(name)}); PK++; .))
     ) 
-    {Op Any_Num}.
+    { Op<op> Any_Num (. stackOp.push_back({op, L""}); PK++; .)}.
 
   Any_Var (. wchar_t *name; .) = D_var<name> 
                                 |S_var<name> 
@@ -115,24 +116,24 @@ PRODUCTIONS
 
 
   Assign (. wchar_t *name; .) = (
-      (D_var<name>'=' Any_Num ';') |
-      (S_var<name> '=' Any_String ';') |
-      (P_var<name>'=' Point ';') |
-      (P_varId<true> '=' Any_Num ';') |
-      (E_var<name> '=' Edge ';' ) |
-      (E_varP<true> '=' Point ';' ) | 
-      (E_varW<true> '=' Any_Num ';' ) | 
-      (E_varD<true> '=' Boolean ';' )
+      (D_var<name>'=' Any_Num ';' (.stackOp.push_back({ASG, wstring(name)}),PK++;.)) |
+      (S_var<name> '=' Any_String ';' (.stackOp.push_back({ASG, wstring(name)}),PK++;.)) |
+      (P_var<name>'=' Point ';' (.stackOp.push_back({ASG, wstring(name)}),PK++;.)) |
+      (P_varId<true> '=' Any_Num ';' (.stackOp.push_back({ASG, L""}),PK++;.)) |
+      (E_var<name> '=' Edge ';' (.stackOp.push_back({ASG, wstring(name)}),PK++;.)) |
+      (E_varP<true> '=' Point ';' (.stackOp.push_back({ASG, L""}),PK++;.)) | 
+      (E_varW<true> '=' Any_Num ';' (.stackOp.push_back({ASG, L""}),PK++;.)) | 
+      (E_varD<true> '=' Boolean ';' (.stackOp.push_back({ASG, L""}),PK++;.))
     ).
 
-  Compare = (
-      (Any_Num RelOp Any_Num) |
-      (Point RelOp Point) |
-      (Edge RelOp Edge) |
-      (Any_String RelOp Any_String)
+  Compare (.Operations op; .) = (
+      (Any_Num RelOp<op> Any_Num (. stackOp.push_back({op,L""}); PK++; .)) |
+      (Point RelOp<op> Point (. stackOp.push_back({op,L""}); PK++; .)) |
+      (Edge RelOp<op> Edge (. stackOp.push_back({op,L""}); PK++; .)) |
+      (Any_String RelOp<op> Any_String (. stackOp.push_back({op,L""}); PK++; .))
     ).
 
-  Boolean_expression = (Compare {LogicOp Compare}).
+  Boolean_expression(.Operations op; .) = (Compare {LogicOp<op> Compare (. stackOp.push_back({op,L""}); PK++; .)}).
 
   Boolean =
       ("True"

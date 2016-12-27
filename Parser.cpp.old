@@ -79,45 +79,45 @@ void Parser::StatL() {
 		Operator();
 }
 
-void Parser::Op() {
+void Parser::Op(Operations* &op) {
 		if (la->kind == 4 /* "+" */) {
 			Get();
-			stackOp.push_back({PLS, L""}); PK++;
+			op= PLS;
 		} else if (la->kind == 5 /* "-" */) {
 			Get();
-			stackOp.push_back({MNS, L""}); PK++;
+			op=MNS;
 		} else if (la->kind == 6 /* "*" */) {
 			Get();
-			stackOp.push_back({MUL, L""}); PK++;
+			op=MUL;
 		} else if (la->kind == 7 /* "/" */) {
 			Get();
-			stackOp.push_back({DIV, L""}); PK++;
+			op=DIV;
 		} else SynErr(43);
 }
 
-void Parser::RelOp() {
+void Parser::RelOp(Operations* &op) {
 		if (la->kind == 8 /* "==" */) {
 			Get();
-			stackOp.push_back({EQU, L""}); PK++;
+			op=EQU;
 		} else if (la->kind == 9 /* "<" */) {
 			Get();
-			stackOp.push_back({LSS, L""}); PK++;
+			op=LSS;
 		} else if (la->kind == 10 /* ">" */) {
 			Get();
-			stackOp.push_back({GTR, L""}); PK++;
-		} else if (la->kind == 11 /* "><" */) {
+			op=GTR;
+		} else if (la->kind == 11 /* "!=" */) {
 			Get();
-			stackOp.push_back({NEQ, L""}); PK++;
+			op=NEQ;
 		} else SynErr(44);
 }
 
-void Parser::LogicOp() {
+void Parser::LogicOp(Operations* &op) {
 		if (la->kind == 12 /* "||" */) {
 			Get();
-			stackOp.push_back({OR, L""}); PK++;
+			op=OR;
 		} else if (la->kind == 13 /* "&" */) {
 			Get();
-			stackOp.push_back({AND, L""}); PK++;
+			op=AND;
 		} else SynErr(45);
 }
 
@@ -204,8 +204,8 @@ void Parser::P_varId(bool set) {
 		Expect(19 /* "pid(" */);
 		P_var(pname);
 		Expect(20 /* ")" */);
-		(set)? stackOp.push_back({SET_PID, L""}),PK++ : stackOp.push_back({GET_PID, L""}),PK++;;
-		stackOp.push_back({NL, wstring(pname)});
+		(set)? stackOp.push_back({SET_PID,  wstring(pname)}),PK++ :
+		 stackOp.push_back({GET_PID,  wstring(pname)}),PK++;
 		
 }
 
@@ -259,19 +259,22 @@ void Parser::Point() {
 }
 
 void Parser::Any_Num() {
-		wchar_t *name; 
+		wchar_t *name; Operations op; 
 		if (la->kind == _Number) {
 			Get();
+			stackOp.push_back({CONST, wstring(t->val)}); PK++; 
 		} else if (la->kind == 19 /* "pid(" */) {
 			P_varId(false);
 		} else if (la->kind == 25 /* "ew(" */) {
 			E_varW(false);
 		} else if (la->kind == 15 /* "d_" */) {
 			D_var(name);
+			stackOp.push_back({LOAD, wstring(name)}); PK++; 
 		} else SynErr(49);
 		while (StartOf(2)) {
-			Op();
+			Op(op);
 			Any_Num();
+			stackOp.push_back({op, L""}); PK++; 
 		}
 }
 
@@ -337,14 +340,26 @@ void Parser::Assign() {
 		switch (la->kind) {
 		case 15 /* "d_" */: {
 			D_var(name);
+			Expect(29 /* "=" */);
+			Any_Num();
+			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, wstring(name)}),PK++;
 			break;
 		}
 		case 16 /* "s_" */: {
 			S_var(name);
+			Expect(29 /* "=" */);
+			Any_String();
+			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, wstring(name)}),PK++;
 			break;
 		}
 		case 17 /* "p_" */: {
 			P_var(name);
+			Expect(29 /* "=" */);
+			Point();
+			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, wstring(name)}),PK++;
 			break;
 		}
 		case 19 /* "pid(" */: {
@@ -352,6 +367,7 @@ void Parser::Assign() {
 			Expect(29 /* "=" */);
 			Any_Num();
 			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, L""}),PK++;
 			break;
 		}
 		case 18 /* "e_" */: {
@@ -359,6 +375,7 @@ void Parser::Assign() {
 			Expect(29 /* "=" */);
 			Edge();
 			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, wstring(name)}),PK++;
 			break;
 		}
 		case 21 /* "ep" */: {
@@ -366,6 +383,7 @@ void Parser::Assign() {
 			Expect(29 /* "=" */);
 			Point();
 			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, L""}),PK++;
 			break;
 		}
 		case 25 /* "ew(" */: {
@@ -373,6 +391,7 @@ void Parser::Assign() {
 			Expect(29 /* "=" */);
 			Any_Num();
 			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, L""}),PK++;
 			break;
 		}
 		case 26 /* "ed(" */: {
@@ -380,6 +399,7 @@ void Parser::Assign() {
 			Expect(29 /* "=" */);
 			Boolean();
 			Expect(30 /* ";" */);
+			stackOp.push_back({ASG, L""}),PK++;
 			break;
 		}
 		default: SynErr(54); break;
@@ -387,30 +407,37 @@ void Parser::Assign() {
 }
 
 void Parser::Compare() {
+		Operations op; 
 		if (StartOf(4)) {
 			Any_Num();
-			RelOp();
+			RelOp(op);
 			Any_Num();
+			stackOp.push_back({op,L""}); PK++; 
 		} else if (la->kind == 17 /* "p_" */ || la->kind == 21 /* "ep" */ || la->kind == 24 /* "(" */) {
 			Point();
-			RelOp();
+			RelOp(op);
 			Point();
+			stackOp.push_back({op,L""}); PK++; 
 		} else if (la->kind == 18 /* "e_" */ || la->kind == 24 /* "(" */) {
 			Edge();
-			RelOp();
+			RelOp(op);
 			Edge();
+			stackOp.push_back({op,L""}); PK++; 
 		} else if (la->kind == _string || la->kind == 16 /* "s_" */) {
 			Any_String();
-			RelOp();
+			RelOp(op);
 			Any_String();
+			stackOp.push_back({op,L""}); PK++; 
 		} else SynErr(55);
 }
 
 void Parser::Boolean_expression() {
+		Operations op; 
 		Compare();
 		while (la->kind == 12 /* "||" */ || la->kind == 13 /* "&" */) {
-			LogicOp();
+			LogicOp(op);
 			Compare();
+			stackOp.push_back({op,L""}); PK++; 
 		}
 }
 
@@ -625,7 +652,7 @@ void Errors::SynErr(int line, int col, int n) {
 			case 8: s = coco_string_create(L"\"==\" expected"); break;
 			case 9: s = coco_string_create(L"\"<\" expected"); break;
 			case 10: s = coco_string_create(L"\">\" expected"); break;
-			case 11: s = coco_string_create(L"\"><\" expected"); break;
+			case 11: s = coco_string_create(L"\"!=\" expected"); break;
 			case 12: s = coco_string_create(L"\"||\" expected"); break;
 			case 13: s = coco_string_create(L"\"&\" expected"); break;
 			case 14: s = coco_string_create(L"\":\" expected"); break;

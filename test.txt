@@ -1,4 +1,4 @@
-p_ppp2 =(2);
+p_ppp2 =(2+2-2);
 e_eee = (p_ppp, (4), True, pid(p_ppp2));
 s_str = "fgfg";
 s_str = "False";
