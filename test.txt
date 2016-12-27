@@ -1,0 +1,22 @@
+p_ppp2 =(2);
+e_eee = (p_ppp, (4), True, pid(p_ppp2));
+s_str = "fgfg";
+s_str = "False";
+
+// commetnt#1
+
+while(s_str == "fgfg"){
+	if(p_ppp > p_ppp2 || p_ppp > p_ppp2) { 
+		s_str = "False"; 
+		s_str = "False";	
+	} else { 
+		s_str = "False";
+	 	s_str = "False";
+	}
+	readln>>p_ppp;
+}
+goto 11;
+writeln<<"False";
+11: readln>>p_ppp;
+writeln<<p_ppp;
+readln>>p_ppp;

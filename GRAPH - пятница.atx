@@ -1,0 +1,164 @@
+#include "Global.h"
+int PK = 0;
+map <wstring, int> labels;
+map <wstring, wstring> pointVar;
+map <wstring, wstring> edgeVar;
+map <wstring, double> doubleVar;
+map <wstring, wstring> stringVar;
+vector <Operations> stackOp;
+vector <wstring> stackVal;
+
+COMPILER GRAPHPZDC
+
+CHARACTERS
+  letter = 'A'..'Z' + 'a'..'z'.
+  digit = "0123456789".
+  verbatimStringChar = ANY - '"'.
+  cr  = '\r'.  lf  = '\n'.  tab = '\t'.
+
+TOKENS
+  Ident  = letter {letter | digit}.
+  Number = digit {digit} ['.' digit {digit}].
+  string = "\"" {verbatimStringChar} "\"".
+
+COMMENTS FROM "//" TO lf
+COMMENTS FROM "/*" TO "*/" NESTED
+
+IGNORE cr + lf + tab
+
+PRODUCTIONS
+
+  GRAPHPZDC = {StatL}.
+  Op = '+'(.stackOp.push_back(PLS); PK++;.) |
+        '-'(.stackOp.push_back(MNS); PK++;.)|
+        '*'(.stackOp.push_back(MUL); PK++;.)|
+        '/'(.stackOp.push_back(DIV); PK++;.).
+
+  RelOp =  "=="(.stackOp.push_back(EQU); PK++;.)|
+            '<'(.stackOp.push_back(LSS); PK++;.)|
+            '>'(.stackOp.push_back(GTR); PK++;.)|
+            "><"(.stackOp.push_back(NEQ); PK++;.).
+
+  LogicOp = "||"(.stackOp.push_back(OR); PK++;.)|
+            "&"(.stackOp.push_back(AND); PK++;.).
+            
+  StatL = [Number (.labels[t->val]=PK;.) ':'] Operator.
+
+  D_var<wchar_t* &name> 
+   = "d_" Ident             (. wstring pref = L"d_";
+                              wstring tmp = coco_string_create(t->val);
+                              pref += tmp;
+                              name = coco_string_create (pref.c_str());
+                            .).
+
+  S_var<wchar_t* &name> 
+   = "s_" Ident             (. wstring pref = L"s_";
+                              wstring tmp = coco_string_create(t->val);
+                              pref += tmp;
+                              name = coco_string_create (pref.c_str());
+                            .).
+  P_var<wchar_t* &name> 
+   = "p_" Ident             (. wstring pref = L"p_";
+                              wstring tmp = coco_string_create(t->val);
+                              pref += tmp;
+                              name = coco_string_create (pref.c_str());
+                            .).
+  E_var<wchar_t* &name>
+   = "e_" Ident             (. wstring pref = L"e_";
+                              wstring tmp = coco_string_create(t->val);
+                              pref += tmp;
+                              name = coco_string_create (pref.c_str());
+                            .).
+
+  P_varId<bool set> (. wchar_t *pname; .) = "pid(" P_var<pname> ')' (.
+    (set)? stackOp.push_back(SET_PID),PK++ : stackOp.push_back(GET_PID),PK++;;
+    stackVal.push_back(wstring(pname));
+  .).
+  E_varP<bool set> (. wchar_t *ename; .) = "ep" ('F'|'S') '(' E_var<ename> ')'(.
+    (set)? stackOp.push_back(SET_EP),PK++ : stackOp.push_back(GET_EP),PK++;
+    stackVal.push_back(wstring(ename));
+  .).
+  E_varW<bool set> (. wchar_t *ename; .) = "ew(" E_var<ename> ')'(.
+    (set)? stackOp.push_back(SET_EW),PK++ : stackOp.push_back(GET_EW),PK++;
+    stackVal.push_back(wstring(ename));
+  .).
+  E_varD<bool set> (. wchar_t *ename; .) = "ed(" E_var<ename> ')'(.
+    (set)? stackOp.push_back(SET_ED),PK++ : stackOp.push_back(GET_ED),PK++;
+    stackVal.push_back(wstring(ename));
+  .).
+
+  Point (. wchar_t *pname; .) = (.stackOp.push_back(PNT_B); PK++;.) (
+      ( '(' Any_Num ')' )  | (P_var<pname> (. stackVal.push_back(wstring(pname)); .)) |
+      (E_varP<false>)
+    )
+    (.stackOp.push_back(PNT_E); PK++;.).
+
+  Edge (. wchar_t *ename; .) = (. stackOp.push_back(EDGE_B); PK++; .) (
+      (E_var<ename> (. stackVal.push_back(wstring(ename)); .) |
+      ( '(' Point ',' Point ',' Boolean ',' Any_Num ')' ) )
+    )
+    (. stackOp.push_back(EDGE_E); PK++; .) 
+    {'+' (. stackOp.push_back(EDGE_PLS); PK++; .) Edge }.
+
+  Any_Num (. wchar_t *name; .) = (Number(.stackVal.push_back(wstring(t->val));.)|
+      P_varId<false>|
+      E_varW<false>|
+      D_var<name> (. stackVal.push_back(wstring(name)); .)
+    ) 
+    {Op Any_Num}.
+
+  Any_Var (. wchar_t *name; .) = D_var<name> (. stackVal.push_back(wstring(name)); .)
+                                |S_var<name> (. stackVal.push_back(wstring(name)); .)
+                                |P_var<name> (. stackVal.push_back(wstring(name)); .)
+                                |E_var<name> (. stackVal.push_back(wstring(name)); .).
+
+  Any_String (. wchar_t *sname; .) = (string (.stackVal.push_back(wstring(t->val));.)
+                                      |S_var<sname>(.stackVal.push_back(wstring(sname));.)) 
+                                      {'.' Any_String (. stackOp.push_back(CNCT); PK++; .)}.
+
+  Assign (. wchar_t *name; .) = (. stackOp.push_back(ASG); PK++; .) (
+      (D_var<name>(. stackVal.push_back(wstring(name)); .) '=' Any_Num ';') | 
+      (S_var<name>(. stackVal.push_back(wstring(name)); .) '=' Any_String ';') |
+      (P_var<name>(. stackVal.push_back(wstring(name)); .) '=' Point ';' ) |
+      (P_varId<true> '=' Any_Num ';') | 
+      (E_var<name>(. stackVal.push_back(wstring(name)); .) '=' Edge ';' ) |
+      (E_varP<true> '=' Point ';' ) | 
+      (E_varW<true> '=' Any_Num ';' ) | 
+      (E_varD<true> '=' Boolean ';' )
+    ).
+
+  Compare = (.stackOp.push_back(COMP_B); PK++;.) (
+      (Any_Num RelOp Any_Num) |
+      (Point RelOp Point) |
+      (Edge RelOp Edge) |
+      (Any_String RelOp Any_String)
+    ) (.stackOp.push_back(COMP_E); PK++;.).
+
+  Boolean_expression = (.stackOp.push_back(B_EXP_B); PK++;.)
+      (Compare {LogicOp Compare})
+    (.stackOp.push_back(B_EXP_E); PK++;.).
+
+  Boolean = (.stackOp.push_back(BOOL_B);  PK++;.)
+      ("True"(. stackVal.push_back(wstring(L"True")); .)
+      |"False"(. stackVal.push_back(wstring(L"False")); .)
+      |Boolean_expression)
+    (.stackOp.push_back(BOOL_E);  PK++;.).
+
+  Delete = "delete" Any_Var ';' (.stackOp.push_back(DEL); PK++;.).
+
+  Goto = "goto" Number (.stackOp.push_back(GOTO); stackVal.push_back(wstring(t->val)); PK++;.) ';'.
+  
+  While = (.stackOp.push_back(WHILE_B); PK++;.) "while("Boolean")" Operator (.stackOp.push_back(WHILE_E); PK++;.).
+  
+  If = (.stackOp.push_back(IF_B); PK++;.) "if(" Boolean ")" Operator 
+    ["else" (.stackOp.push_back(ELSE); PK++;.) Operator] (.stackOp.push_back(IF_E); PK++;.).
+  
+  Bl_Operator = '{'(.stackOp.push_back(BL_B); PK++;.) {Operator} (.stackOp.push_back(BL_E); PK++;.)'}'.
+  
+  Writeln = "writeln<<" (Any_Num|Any_Var|Any_String) ";" (.stackOp.push_back(WRITE); PK++;.).
+  
+  Readln = (.stackOp.push_back(READ); PK++;.) "readln>>" Any_Var ";".
+
+  Operator = Bl_Operator|If|While|Assign|Goto|Delete|Writeln|Readln.
+
+END GRAPHPZDC.

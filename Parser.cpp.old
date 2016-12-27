@@ -1,0 +1,706 @@
+
+
+#include <wchar.h>
+#include "Parser.h"
+#include "Scanner.h"
+
+int PK = 0;
+map <wstring, int> labels;
+map <wstring, wstring> variabels;
+vector <StackEl> stackOp;
+
+
+void Parser::SynErr(int n) {
+	if (errDist >= minErrDist) errors->SynErr(la->line, la->col, n);
+	errDist = 0;
+}
+
+void Parser::SemErr(const wchar_t* msg) {
+	if (errDist >= minErrDist) errors->Error(t->line, t->col, msg);
+	errDist = 0;
+}
+
+void Parser::Get() {
+	for (;;) {
+		t = la;
+		la = scanner->Scan();
+		if (la->kind <= maxT) { ++errDist; break; }
+
+		if (dummyToken != t) {
+			dummyToken->kind = t->kind;
+			dummyToken->pos = t->pos;
+			dummyToken->col = t->col;
+			dummyToken->line = t->line;
+			dummyToken->next = NULL;
+			coco_string_delete(dummyToken->val);
+			dummyToken->val = coco_string_create(t->val);
+			t = dummyToken;
+		}
+		la = t;
+	}
+}
+
+void Parser::Expect(int n) {
+	if (la->kind==n) Get(); else { SynErr(n); }
+}
+
+void Parser::ExpectWeak(int n, int follow) {
+	if (la->kind == n) Get();
+	else {
+		SynErr(n);
+		while (!StartOf(follow)) Get();
+	}
+}
+
+bool Parser::WeakSeparator(int n, int syFol, int repFol) {
+	if (la->kind == n) {Get(); return true;}
+	else if (StartOf(repFol)) {return false;}
+	else {
+		SynErr(n);
+		while (!(StartOf(syFol) || StartOf(repFol) || StartOf(0))) {
+			Get();
+		}
+		return StartOf(syFol);
+	}
+}
+
+void Parser::GRAPHPZDC() {
+		while (StartOf(1)) {
+			StatL();
+		}
+}
+
+void Parser::StatL() {
+		if (la->kind == _Number) {
+			Get();
+			labels[t->val]=PK;
+			Expect(14 /* ":" */);
+		}
+		Operator();
+}
+
+void Parser::Op() {
+		if (la->kind == 4 /* "+" */) {
+			Get();
+			stackOp.push_back({PLS, L""}); PK++;
+		} else if (la->kind == 5 /* "-" */) {
+			Get();
+			stackOp.push_back({MNS, L""}); PK++;
+		} else if (la->kind == 6 /* "*" */) {
+			Get();
+			stackOp.push_back({MUL, L""}); PK++;
+		} else if (la->kind == 7 /* "/" */) {
+			Get();
+			stackOp.push_back({DIV, L""}); PK++;
+		} else SynErr(43);
+}
+
+void Parser::RelOp() {
+		if (la->kind == 8 /* "==" */) {
+			Get();
+			stackOp.push_back({EQU, L""}); PK++;
+		} else if (la->kind == 9 /* "<" */) {
+			Get();
+			stackOp.push_back({LSS, L""}); PK++;
+		} else if (la->kind == 10 /* ">" */) {
+			Get();
+			stackOp.push_back({GTR, L""}); PK++;
+		} else if (la->kind == 11 /* "><" */) {
+			Get();
+			stackOp.push_back({NEQ, L""}); PK++;
+		} else SynErr(44);
+}
+
+void Parser::LogicOp() {
+		if (la->kind == 12 /* "||" */) {
+			Get();
+			stackOp.push_back({OR, L""}); PK++;
+		} else if (la->kind == 13 /* "&" */) {
+			Get();
+			stackOp.push_back({AND, L""}); PK++;
+		} else SynErr(45);
+}
+
+void Parser::Operator() {
+		switch (la->kind) {
+		case 38 /* "{" */: {
+			Bl_Operator();
+			break;
+		}
+		case 36 /* "if(" */: {
+			If();
+			break;
+		}
+		case 35 /* "while(" */: {
+			While();
+			break;
+		}
+		case 15 /* "d_" */: case 16 /* "s_" */: case 17 /* "p_" */: case 18 /* "e_" */: case 19 /* "pid(" */: case 21 /* "ep" */: case 25 /* "ew(" */: case 26 /* "ed(" */: {
+			Assign();
+			break;
+		}
+		case 34 /* "goto" */: {
+			Goto();
+			break;
+		}
+		case 33 /* "delete" */: {
+			Delete();
+			break;
+		}
+		case 40 /* "writeln<<" */: {
+			Writeln();
+			break;
+		}
+		case 41 /* "readln>>" */: {
+			Readln();
+			break;
+		}
+		default: SynErr(46); break;
+		}
+}
+
+void Parser::D_var(wchar_t* &name) {
+		Expect(15 /* "d_" */);
+		Expect(_Ident);
+		wstring pref = L"d_";
+		wstring tmp = coco_string_create(t->val);
+		pref += tmp;
+		name = coco_string_create (pref.c_str());
+		
+}
+
+void Parser::S_var(wchar_t* &name) {
+		Expect(16 /* "s_" */);
+		Expect(_Ident);
+		wstring pref = L"s_";
+		wstring tmp = coco_string_create(t->val);
+		pref += tmp;
+		name = coco_string_create (pref.c_str());
+		
+}
+
+void Parser::P_var(wchar_t* &name) {
+		Expect(17 /* "p_" */);
+		Expect(_Ident);
+		wstring pref = L"p_";
+		wstring tmp = coco_string_create(t->val);
+		pref += tmp;
+		name = coco_string_create (pref.c_str());
+		
+}
+
+void Parser::E_var(wchar_t* &name) {
+		Expect(18 /* "e_" */);
+		Expect(_Ident);
+		wstring pref = L"e_";
+		wstring tmp = coco_string_create(t->val);
+		pref += tmp;
+		name = coco_string_create (pref.c_str());
+		
+}
+
+void Parser::P_varId(bool set) {
+		wchar_t *pname; 
+		Expect(19 /* "pid(" */);
+		P_var(pname);
+		Expect(20 /* ")" */);
+		(set)? stackOp.push_back({SET_PID, L""}),PK++ : stackOp.push_back({GET_PID, L""}),PK++;;
+		stackOp.push_back({NL, wstring(pname)});
+		
+}
+
+void Parser::E_varP(bool set) {
+		wchar_t *ename; 
+		Expect(21 /* "ep" */);
+		if (la->kind == 22 /* "F" */) {
+			Get();
+		} else if (la->kind == 23 /* "S" */) {
+			Get();
+		} else SynErr(47);
+		Expect(24 /* "(" */);
+		E_var(ename);
+		Expect(20 /* ")" */);
+		(set)? stackOp.push_back({SET_EP, L""}),PK++ : stackOp.push_back({GET_EP, L""}),PK++;
+		stackOp.push_back({NL, wstring(ename)});
+		
+}
+
+void Parser::E_varW(bool set) {
+		wchar_t *ename; 
+		Expect(25 /* "ew(" */);
+		E_var(ename);
+		Expect(20 /* ")" */);
+		(set)? stackOp.push_back({SET_EW, L""}),PK++ : stackOp.push_back({GET_EW, L""}),PK++;
+		stackOp.push_back({NL, wstring(ename)});
+		
+}
+
+void Parser::E_varD(bool set) {
+		wchar_t *ename; 
+		Expect(26 /* "ed(" */);
+		E_var(ename);
+		Expect(20 /* ")" */);
+		(set)? stackOp.push_back({SET_ED, L""}),PK++ : stackOp.push_back({GET_ED, L""}),PK++;
+		stackOp.push_back({NL, wstring(ename)});
+		
+}
+
+void Parser::Point() {
+		wchar_t *pname; 
+		if (la->kind == 24 /* "(" */) {
+			Get();
+			Any_Num();
+			Expect(20 /* ")" */);
+		} else if (la->kind == 17 /* "p_" */) {
+			P_var(pname);
+		} else if (la->kind == 21 /* "ep" */) {
+			E_varP(false);
+		} else SynErr(48);
+}
+
+void Parser::Any_Num() {
+		wchar_t *name; 
+		if (la->kind == _Number) {
+			Get();
+		} else if (la->kind == 19 /* "pid(" */) {
+			P_varId(false);
+		} else if (la->kind == 25 /* "ew(" */) {
+			E_varW(false);
+		} else if (la->kind == 15 /* "d_" */) {
+			D_var(name);
+		} else SynErr(49);
+		while (StartOf(2)) {
+			Op();
+			Any_Num();
+		}
+}
+
+void Parser::Edge() {
+		wchar_t *ename; 
+		if (la->kind == 18 /* "e_" */) {
+			E_var(ename);
+		} else if (la->kind == 24 /* "(" */) {
+			Get();
+			Point();
+			Expect(27 /* "," */);
+			Point();
+			Expect(27 /* "," */);
+			Boolean();
+			Expect(27 /* "," */);
+			Any_Num();
+			Expect(20 /* ")" */);
+		} else SynErr(50);
+		while (la->kind == 4 /* "+" */) {
+			Get();
+			Edge();
+		}
+}
+
+void Parser::Boolean() {
+		if (la->kind == 31 /* "True" */) {
+			Get();
+		} else if (la->kind == 32 /* "False" */) {
+			Get();
+		} else if (StartOf(3)) {
+			Boolean_expression();
+		} else SynErr(51);
+}
+
+void Parser::Any_Var() {
+		wchar_t *name; 
+		if (la->kind == 15 /* "d_" */) {
+			D_var(name);
+		} else if (la->kind == 16 /* "s_" */) {
+			S_var(name);
+		} else if (la->kind == 17 /* "p_" */) {
+			P_var(name);
+		} else if (la->kind == 18 /* "e_" */) {
+			E_var(name);
+		} else SynErr(52);
+}
+
+void Parser::Any_String() {
+		wchar_t *sname; 
+		if (la->kind == _string) {
+			Get();
+		} else if (la->kind == 16 /* "s_" */) {
+			S_var(sname);
+		} else SynErr(53);
+		while (la->kind == 28 /* "." */) {
+			Get();
+			Any_String();
+		}
+}
+
+void Parser::Assign() {
+		wchar_t *name; 
+		switch (la->kind) {
+		case 15 /* "d_" */: {
+			D_var(name);
+			break;
+		}
+		case 16 /* "s_" */: {
+			S_var(name);
+			break;
+		}
+		case 17 /* "p_" */: {
+			P_var(name);
+			break;
+		}
+		case 19 /* "pid(" */: {
+			P_varId(true);
+			Expect(29 /* "=" */);
+			Any_Num();
+			Expect(30 /* ";" */);
+			break;
+		}
+		case 18 /* "e_" */: {
+			E_var(name);
+			Expect(29 /* "=" */);
+			Edge();
+			Expect(30 /* ";" */);
+			break;
+		}
+		case 21 /* "ep" */: {
+			E_varP(true);
+			Expect(29 /* "=" */);
+			Point();
+			Expect(30 /* ";" */);
+			break;
+		}
+		case 25 /* "ew(" */: {
+			E_varW(true);
+			Expect(29 /* "=" */);
+			Any_Num();
+			Expect(30 /* ";" */);
+			break;
+		}
+		case 26 /* "ed(" */: {
+			E_varD(true);
+			Expect(29 /* "=" */);
+			Boolean();
+			Expect(30 /* ";" */);
+			break;
+		}
+		default: SynErr(54); break;
+		}
+}
+
+void Parser::Compare() {
+		if (StartOf(4)) {
+			Any_Num();
+			RelOp();
+			Any_Num();
+		} else if (la->kind == 17 /* "p_" */ || la->kind == 21 /* "ep" */ || la->kind == 24 /* "(" */) {
+			Point();
+			RelOp();
+			Point();
+		} else if (la->kind == 18 /* "e_" */ || la->kind == 24 /* "(" */) {
+			Edge();
+			RelOp();
+			Edge();
+		} else if (la->kind == _string || la->kind == 16 /* "s_" */) {
+			Any_String();
+			RelOp();
+			Any_String();
+		} else SynErr(55);
+}
+
+void Parser::Boolean_expression() {
+		Compare();
+		while (la->kind == 12 /* "||" */ || la->kind == 13 /* "&" */) {
+			LogicOp();
+			Compare();
+		}
+}
+
+void Parser::Delete() {
+		Expect(33 /* "delete" */);
+		Any_Var();
+		Expect(30 /* ";" */);
+}
+
+void Parser::Goto() {
+		Expect(34 /* "goto" */);
+		Expect(_Number);
+		Expect(30 /* ";" */);
+}
+
+void Parser::While() {
+		Expect(35 /* "while(" */);
+		Boolean();
+		Expect(20 /* ")" */);
+		Operator();
+}
+
+void Parser::If() {
+		Expect(36 /* "if(" */);
+		Boolean();
+		Expect(20 /* ")" */);
+		Operator();
+		if (la->kind == 37 /* "else" */) {
+			Get();
+			Operator();
+		}
+}
+
+void Parser::Bl_Operator() {
+		Expect(38 /* "{" */);
+		while (StartOf(5)) {
+			Operator();
+		}
+		Expect(39 /* "}" */);
+}
+
+void Parser::Writeln() {
+		Expect(40 /* "writeln<<" */);
+		if (StartOf(4)) {
+			Any_Num();
+		} else if (StartOf(6)) {
+			Any_Var();
+		} else if (la->kind == _string || la->kind == 16 /* "s_" */) {
+			Any_String();
+		} else SynErr(56);
+		Expect(30 /* ";" */);
+}
+
+void Parser::Readln() {
+		Expect(41 /* "readln>>" */);
+		Any_Var();
+		Expect(30 /* ";" */);
+}
+
+
+
+
+// If the user declared a method Init and a mehtod Destroy they should
+// be called in the contructur and the destructor respctively.
+//
+// The following templates are used to recognize if the user declared
+// the methods Init and Destroy.
+
+template<typename T>
+struct ParserInitExistsRecognizer {
+	template<typename U, void (U::*)() = &U::Init>
+	struct ExistsIfInitIsDefinedMarker{};
+
+	struct InitIsMissingType {
+		char dummy1;
+	};
+	
+	struct InitExistsType {
+		char dummy1; char dummy2;
+	};
+
+	// exists always
+	template<typename U>
+	static InitIsMissingType is_here(...);
+
+	// exist only if ExistsIfInitIsDefinedMarker is defined
+	template<typename U>
+	static InitExistsType is_here(ExistsIfInitIsDefinedMarker<U>*);
+
+	enum { InitExists = (sizeof(is_here<T>(NULL)) == sizeof(InitExistsType)) };
+};
+
+template<typename T>
+struct ParserDestroyExistsRecognizer {
+	template<typename U, void (U::*)() = &U::Destroy>
+	struct ExistsIfDestroyIsDefinedMarker{};
+
+	struct DestroyIsMissingType {
+		char dummy1;
+	};
+	
+	struct DestroyExistsType {
+		char dummy1; char dummy2;
+	};
+
+	// exists always
+	template<typename U>
+	static DestroyIsMissingType is_here(...);
+
+	// exist only if ExistsIfDestroyIsDefinedMarker is defined
+	template<typename U>
+	static DestroyExistsType is_here(ExistsIfDestroyIsDefinedMarker<U>*);
+
+	enum { DestroyExists = (sizeof(is_here<T>(NULL)) == sizeof(DestroyExistsType)) };
+};
+
+// The folloing templates are used to call the Init and Destroy methods if they exist.
+
+// Generic case of the ParserInitCaller, gets used if the Init method is missing
+template<typename T, bool = ParserInitExistsRecognizer<T>::InitExists>
+struct ParserInitCaller {
+	static void CallInit(T *t) {
+		// nothing to do
+	}
+};
+
+// True case of the ParserInitCaller, gets used if the Init method exists
+template<typename T>
+struct ParserInitCaller<T, true> {
+	static void CallInit(T *t) {
+		t->Init();
+	}
+};
+
+// Generic case of the ParserDestroyCaller, gets used if the Destroy method is missing
+template<typename T, bool = ParserDestroyExistsRecognizer<T>::DestroyExists>
+struct ParserDestroyCaller {
+	static void CallDestroy(T *t) {
+		// nothing to do
+	}
+};
+
+// True case of the ParserDestroyCaller, gets used if the Destroy method exists
+template<typename T>
+struct ParserDestroyCaller<T, true> {
+	static void CallDestroy(T *t) {
+		t->Destroy();
+	}
+};
+
+void Parser::Parse() {
+	t = NULL;
+	la = dummyToken = new Token();
+	la->val = coco_string_create(L"Dummy Token");
+	Get();
+	GRAPHPZDC();
+	Expect(0);
+}
+
+Parser::Parser(Scanner *scanner) {
+	maxT = 42;
+
+	ParserInitCaller<Parser>::CallInit(this);
+	dummyToken = NULL;
+	t = la = NULL;
+	minErrDist = 2;
+	errDist = minErrDist;
+	this->scanner = scanner;
+	errors = new Errors();
+}
+
+bool Parser::StartOf(int s) {
+	const bool T = true;
+	const bool x = false;
+
+	static bool set[7][44] = {
+		{T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x},
+		{x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,T, T,T,T,T, x,T,x,x, x,T,T,x, x,x,x,x, x,T,T,T, T,x,T,x, T,T,x,x},
+		{x,x,x,x, T,T,T,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x},
+		{x,x,T,T, x,x,x,x, x,x,x,x, x,x,x,T, T,T,T,T, x,T,x,x, T,T,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x},
+		{x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,x,T, x,x,x,x, x,T,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x},
+		{x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, T,T,T,T, x,T,x,x, x,T,T,x, x,x,x,x, x,T,T,T, T,x,T,x, T,T,x,x},
+		{x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, T,T,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x}
+	};
+
+
+
+	return set[s][la->kind];
+}
+
+Parser::~Parser() {
+	ParserDestroyCaller<Parser>::CallDestroy(this);
+	delete errors;
+	delete dummyToken;
+}
+
+Errors::Errors() {
+	count = 0;
+}
+
+void Errors::SynErr(int line, int col, int n) {
+	wchar_t* s;
+	switch (n) {
+			case 0: s = coco_string_create(L"EOF expected"); break;
+			case 1: s = coco_string_create(L"Ident expected"); break;
+			case 2: s = coco_string_create(L"Number expected"); break;
+			case 3: s = coco_string_create(L"string expected"); break;
+			case 4: s = coco_string_create(L"\"+\" expected"); break;
+			case 5: s = coco_string_create(L"\"-\" expected"); break;
+			case 6: s = coco_string_create(L"\"*\" expected"); break;
+			case 7: s = coco_string_create(L"\"/\" expected"); break;
+			case 8: s = coco_string_create(L"\"==\" expected"); break;
+			case 9: s = coco_string_create(L"\"<\" expected"); break;
+			case 10: s = coco_string_create(L"\">\" expected"); break;
+			case 11: s = coco_string_create(L"\"><\" expected"); break;
+			case 12: s = coco_string_create(L"\"||\" expected"); break;
+			case 13: s = coco_string_create(L"\"&\" expected"); break;
+			case 14: s = coco_string_create(L"\":\" expected"); break;
+			case 15: s = coco_string_create(L"\"d_\" expected"); break;
+			case 16: s = coco_string_create(L"\"s_\" expected"); break;
+			case 17: s = coco_string_create(L"\"p_\" expected"); break;
+			case 18: s = coco_string_create(L"\"e_\" expected"); break;
+			case 19: s = coco_string_create(L"\"pid(\" expected"); break;
+			case 20: s = coco_string_create(L"\")\" expected"); break;
+			case 21: s = coco_string_create(L"\"ep\" expected"); break;
+			case 22: s = coco_string_create(L"\"F\" expected"); break;
+			case 23: s = coco_string_create(L"\"S\" expected"); break;
+			case 24: s = coco_string_create(L"\"(\" expected"); break;
+			case 25: s = coco_string_create(L"\"ew(\" expected"); break;
+			case 26: s = coco_string_create(L"\"ed(\" expected"); break;
+			case 27: s = coco_string_create(L"\",\" expected"); break;
+			case 28: s = coco_string_create(L"\".\" expected"); break;
+			case 29: s = coco_string_create(L"\"=\" expected"); break;
+			case 30: s = coco_string_create(L"\";\" expected"); break;
+			case 31: s = coco_string_create(L"\"True\" expected"); break;
+			case 32: s = coco_string_create(L"\"False\" expected"); break;
+			case 33: s = coco_string_create(L"\"delete\" expected"); break;
+			case 34: s = coco_string_create(L"\"goto\" expected"); break;
+			case 35: s = coco_string_create(L"\"while(\" expected"); break;
+			case 36: s = coco_string_create(L"\"if(\" expected"); break;
+			case 37: s = coco_string_create(L"\"else\" expected"); break;
+			case 38: s = coco_string_create(L"\"{\" expected"); break;
+			case 39: s = coco_string_create(L"\"}\" expected"); break;
+			case 40: s = coco_string_create(L"\"writeln<<\" expected"); break;
+			case 41: s = coco_string_create(L"\"readln>>\" expected"); break;
+			case 42: s = coco_string_create(L"??? expected"); break;
+			case 43: s = coco_string_create(L"invalid Op"); break;
+			case 44: s = coco_string_create(L"invalid RelOp"); break;
+			case 45: s = coco_string_create(L"invalid LogicOp"); break;
+			case 46: s = coco_string_create(L"invalid Operator"); break;
+			case 47: s = coco_string_create(L"invalid E_varP"); break;
+			case 48: s = coco_string_create(L"invalid Point"); break;
+			case 49: s = coco_string_create(L"invalid Any_Num"); break;
+			case 50: s = coco_string_create(L"invalid Edge"); break;
+			case 51: s = coco_string_create(L"invalid Boolean"); break;
+			case 52: s = coco_string_create(L"invalid Any_Var"); break;
+			case 53: s = coco_string_create(L"invalid Any_String"); break;
+			case 54: s = coco_string_create(L"invalid Assign"); break;
+			case 55: s = coco_string_create(L"invalid Compare"); break;
+			case 56: s = coco_string_create(L"invalid Writeln"); break;
+
+		default:
+		{
+			wchar_t format[20];
+			coco_swprintf(format, 20, L"error %d", n);
+			s = coco_string_create(format);
+		}
+		break;
+	}
+	wprintf(L"-- line %d col %d: %ls\n", line, col, s);
+	coco_string_delete(s);
+	count++;
+}
+
+void Errors::Error(int line, int col, const wchar_t *s) {
+	wprintf(L"-- line %d col %d: %ls\n", line, col, s);
+	count++;
+}
+
+void Errors::Warning(int line, int col, const wchar_t *s) {
+	wprintf(L"-- line %d col %d: %ls\n", line, col, s);
+}
+
+void Errors::Warning(const wchar_t *s) {
+	wprintf(L"%ls\n", s);
+}
+
+void Errors::Exception(const wchar_t* s) {
+	wprintf(L"%ls", s); 
+	exit(1);
+}
+
+
